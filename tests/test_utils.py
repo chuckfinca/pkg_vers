@@ -1,5 +1,6 @@
 import unittest
 import pkg_vers
+from pkg_vers.package_manager import _get_imported_top_level_packages
 
 class TestUtils(unittest.TestCase):
 
@@ -9,7 +10,7 @@ class TestUtils(unittest.TestCase):
 
     def test_get_imported_top_level_packages(self):
         files = pkg_vers.find_all_py_files('tests')
-        packages = pkg_vers.get_imported_top_level_packages(files)
+        packages = _get_imported_top_level_packages(files)
         self.assertIsInstance(packages, list)
 
 if __name__ == '__main__':

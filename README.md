@@ -29,7 +29,8 @@ For more nuanced use cases, the following helper functions are exposed:
 - `get_imported_top_level_packages(script_paths)`: Extract top-level imported packages from a list of script paths.
 - `get_installed_packages()`: Retrieve a dictionary of installed packages and their versions using pip and mamba.
 - `get_package_version(package)`: Get the version of a specific package using importlib.
-- `get_specific_package_versions(imported_packages, installed_packages)`: Get versions of a list of imported packages based on the installed packages.
+- `get_top_level_package_versions(imported_packages, installed_packages)`: Get versions of a list of imported packages based on the installed packages.
+- `get_package_versions_from_ipynb()`: Get versions of imported packages from an active Jupyter Notebook by name.
 
 ## Contributing
 

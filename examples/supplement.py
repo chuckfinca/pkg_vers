@@ -1,5 +1,6 @@
 import graphviz
 import yaml
-import sklearn
+import PIL
+import csv
 
 # ^ Adding more imports to gather for the demo

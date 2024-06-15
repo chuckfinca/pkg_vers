@@ -7,13 +7,24 @@ import nbformat
 from .utils import _run_subprocess
 
 IGNORED_LIB_MODULES = {'os', 'enum', 'random'}
+PACKAGE_NAME_EXCEPTIONS = {'more-itertools': 'itertools'}
+
+import_pattern_string = r'^\s*import\s+(\S+)' #r'^(?!\s*$)\s*import\s+(\S+)' #
+from_import_pattern_string = r'^\s*from\s+(\S+)\s+import' #r'^(?!\s*$)\s*from\s+(\S+)\s+import' #
 
 def get_package_versions_from(files):
     if isinstance(files, str):
         files = [files]
 
     installed_packages = _get_installed_packages()
-    imported_packages = _get_imported_top_level_packages(files)
+    imported_packages = set()
+
+    for file in files:
+        if file.endswith('.py'):
+            imported_packages.update(_get_imported_top_level_packages([file]))
+        elif file.endswith('.ipynb'):
+            imported_packages.update(_get_imported_top_level_packages_from_ipynb(file))
+
     packages_with_versions = _get_package_versions(imported_packages, installed_packages)
     return packages_with_versions
 
@@ -30,8 +41,8 @@ def _get_imported_top_level_packages_from_ipynb(path):
             notebook = nbformat.read(file, as_version=4)
 
         # Regular expression patterns to match import statements
-        import_pattern = re.compile(r'^\s*import\s+(\S+)')
-        from_import_pattern = re.compile(r'^\s*from\s+(\S+)\s+import')
+        import_pattern = re.compile(import_pattern_string)
+        from_import_pattern = re.compile(from_import_pattern_string)
 
         # Initialize a set to hold unique imports
         imports = set()
@@ -50,50 +61,53 @@ def _get_imported_top_level_packages_from_ipynb(path):
                 for line in lines:
                     import_match = import_pattern.match(line)
                     from_import_match = from_import_pattern.match(line)
-
                     if import_match:
-                        imports.add(import_match.group(1).split('.')[0])
+                        import_name = import_match.group(1).split('.')[0]
+                        if import_name:
+                            imports.add(import_name)
+                        
                     elif from_import_match:
-                        imports.add(from_import_match.group(1).split('.')[0])
+                        import_name = from_import_match.group(1).split('.')[0]
+                        if import_name:
+                            imports.add(import_name)
 
         return imports
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"Error reading notebook {path}: {e}")
         return set()
 
-def _get_imported_top_level_packages(script_paths):
+def _get_imported_top_level_packages(files):
     imported_packages = set()
-    for script_path in script_paths:
-        with open(script_path, 'r') as file:
-            code = file.read()
-        
-            tree = ast.parse(code, filename=script_path)
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Import):
-                    for alias in node.names:
-                        imported_packages.add(alias.name.split('.')[0])
-                elif isinstance(node, ast.ImportFrom):
-                    imported_packages.add(node.module.split('.')[0])
-    return list(imported_packages)
+    import_pattern = re.compile(import_pattern_string)
+    from_import_pattern = re.compile(from_import_pattern_string)
+
+    for file in files:
+        with open(file, 'r') as f:
+            for line in f:
+                import_match = import_pattern.match(line)
+                from_import_match = from_import_pattern.match(line)
+                if import_match:
+                    imported_packages.add(import_match.group(1).split('.')[0])
+                elif from_import_match:
+                    imported_packages.add(from_import_match.group(1).split('.')[0])
+
+    return imported_packages
 
 def _get_installed_packages():
     packages = {}
-    if shutil.which('mamba'):
-        mamba_lines = _run_subprocess(['mamba', 'list'])
-        for line in mamba_lines:
-            if line.startswith('#'):
-                continue
-            parts = re.split(r'\s+', line)
-            if len(parts) >= 2:
-                package, version = parts[0], parts[1]
-                packages[package] = version
+    freeze_lines = _run_subprocess([sys.executable, '-m', 'pip', 'freeze'])
+    for line in freeze_lines:
+        parts = line.split('==')
+        if len(parts) == 2:
+            package, version = parts
+            packages[_package_version_key(package)] = version
 
-    pip_lines = _run_subprocess([sys.executable, '-m', 'pip', 'freeze'])
+    pip_lines = _run_subprocess([sys.executable, '-m', 'pip', 'list'])
     for line in pip_lines:
-        if '==' in line:
-            pkg, version = line.split('==')
-            if pkg not in packages:
-                packages[pkg] = version
+        parts = re.split(r'\s+', line)
+        if len(parts) >= 2:
+            package, version = parts[0], parts[1]
+            packages[_package_version_key(package)] = version
 
     return packages
 
@@ -103,6 +117,9 @@ def _get_package_version(package):
         return getattr(module, '__version__', '')
     except ImportError:
         return ''
+    
+def _package_version_key(package):
+    return PACKAGE_NAME_EXCEPTIONS[package] if package in PACKAGE_NAME_EXCEPTIONS.keys() else package
 
 def _get_package_versions(imported_packages, installed_packages):
     specific_versions = {}

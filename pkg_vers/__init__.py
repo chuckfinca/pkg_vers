@@ -1,4 +1,2 @@
-from .package_manager import get_package_versions_from
-from .package_manager import get_package_versions_from_ipynb
-from .utils import find_all_py_files
-
+from pkg_vers.package_manager import get_pkg_vers
+from pkg_vers.utils import get_files

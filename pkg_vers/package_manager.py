@@ -1,25 +1,28 @@
 import importlib
-import shutil
 import re
 import sys
-import ast
+import os
 import nbformat
-from .utils import _run_subprocess
+from pkg_vers.utils import _run_subprocess
+from pkg_vers.utils import get_files
 
 IGNORED_LIB_MODULES = {'os', 'enum', 'random'}
 PACKAGE_NAME_EXCEPTIONS = {'more-itertools': 'itertools'}
 
-import_pattern_string = r'^\s*import\s+(\S+)' #r'^(?!\s*$)\s*import\s+(\S+)' #
-from_import_pattern_string = r'^\s*from\s+(\S+)\s+import' #r'^(?!\s*$)\s*from\s+(\S+)\s+import' #
+import_pattern_string = r'^\s*import\s+(\S+)'
+from_import_pattern_string = r'^\s*from\s+(\S+)\s+import'
 
-def get_package_versions_from(files):
-    if isinstance(files, str):
-        files = [files]
+def get_pkg_vers(paths):
+    if isinstance(paths, str):
+        paths = [paths]
+    
+    """Get package versions from given files or directories."""
+    all_files = get_files(paths)
 
     installed_packages = _get_installed_packages()
     imported_packages = set()
 
-    for file in files:
+    for file in all_files:
         if file.endswith('.py'):
             imported_packages.update(_get_imported_top_level_packages([file]))
         elif file.endswith('.ipynb'):
@@ -28,7 +31,7 @@ def get_package_versions_from(files):
     packages_with_versions = _get_package_versions(imported_packages, installed_packages)
     return packages_with_versions
 
-def get_package_versions_from_ipynb(path):
+def _get_package_versions_from_ipynb(path):
     installed_packages = _get_installed_packages()
     imported_packages = _get_imported_top_level_packages_from_ipynb(path)
     packages_with_versions = _get_package_versions(imported_packages, installed_packages)

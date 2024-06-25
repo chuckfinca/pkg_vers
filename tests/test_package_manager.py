@@ -9,10 +9,10 @@ class TestPackageManager(unittest.TestCase):
         self.assertGreater(len(packages), 0)  # Ensure some packages are returned
 
     def test_get_specific_package_versions(self):
-        versions = _get_package_versions(['torch', 'sys'], {'torch': '1.0', 'sys': '2.0'})
+        versions = _get_package_versions(['torch', 'numpy'], {'torch': '1.0', 'numpy': '2.0'})
         self.assertIsInstance(versions, dict)
         self.assertIn('torch', versions)
-        self.assertIn('sys', versions)
+        self.assertIn('numpy', versions)
 
     def test_get_imported_top_level_packages(self):
         imported_packages = _get_imported_top_level_packages([__file__])

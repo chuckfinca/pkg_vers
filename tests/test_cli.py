@@ -1,5 +1,6 @@
+import subprocess
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from io import StringIO
 import sys
 import os
@@ -31,10 +32,39 @@ class TestMain(unittest.TestCase):
         # Get the actual output and strip any extra whitespace
         actual_output = mock_stdout.getvalue().strip()
 
-        print(mock_stdout.getvalue())
-        print(expected_output)
         # Check the actual output
         self.assertEqual(actual_output, expected_output.strip())
+
+
+class TestPackageInstallation(unittest.TestCase):
+
+    @patch('subprocess.run')
+    @patch('sys.stdout', new_callable=StringIO)
+    @patch('sys.argv', ['__main__.py', 'install_packages', 'package1==1.0.0', 'package2==2.0.0'])
+    def test_install_packages(self, mock_stdout, mock_subprocess_run):
+        # Configure the mock to simulate Mamba success for package1 and failure for package2
+        def mock_subprocess_effect(*args, **kwargs):
+            if 'mamba' in args[0] and 'package1==1.0.0' in args[0]:
+                return MagicMock(returncode=0)
+            elif 'mamba' in args[0] and 'package2==2.0.0' in args[0]:
+                raise subprocess.CalledProcessError(1, args[0])
+            elif 'pip' in args[0] and 'package2==2.0.0' in args[0]:
+                return MagicMock(returncode=0)
+            return MagicMock(returncode=0)
+
+        mock_subprocess_run.side_effect = mock_subprocess_effect
+
+        # Call the main function to trigger the CLI
+        main_module.main()
+
+        # Get the actual output
+        actual_output = mock_stdout.getvalue()
+
+        # Check for expected output
+        self.assertIn("Attempting to install package1==1.0.0 with Mamba", actual_output)
+        self.assertIn("Attempting to install package2==2.0.0 with Mamba", actual_output)
+        self.assertIn("Mamba installation failed for package2", actual_output)
+        self.assertIn("Attempting pip install", actual_output)
 
 if __name__ == '__main__':
     unittest.main()

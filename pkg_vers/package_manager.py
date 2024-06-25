@@ -1,13 +1,20 @@
 import importlib
+import pkgutil
 import re
+import subprocess
 import sys
-import os
 import nbformat
 from pkg_vers.utils import _run_subprocess
 from pkg_vers.utils import get_files
+from stdlib_list import stdlib_list
 
-IGNORED_LIB_MODULES = {'os', 'enum', 'random'}
-PACKAGE_NAME_EXCEPTIONS = {'more-itertools': 'itertools'}
+def _get_excluded_module_names():
+    python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+    standard_modules = stdlib_list(python_version)
+    return sorted(standard_modules)
+
+IGNORED_LIB_MODULES = _get_excluded_module_names() 
+PACKAGE_NAME_EXCEPTIONS = {'pillow': 'PIL', 'scikit-learn' : 'sklearn'}
 
 import_pattern_string = r'^\s*import\s+(\S+)'
 from_import_pattern_string = r'^\s*from\s+(\S+)\s+import'
@@ -31,11 +38,43 @@ def get_pkg_vers(paths):
     packages_with_versions = _get_package_versions(imported_packages, installed_packages)
     return packages_with_versions
 
-def _get_package_versions_from_ipynb(path):
-    installed_packages = _get_installed_packages()
-    imported_packages = _get_imported_top_level_packages_from_ipynb(path)
-    packages_with_versions = _get_package_versions(imported_packages, installed_packages)
-    return packages_with_versions
+def install_packages(packages):
+    if isinstance(packages, dict):
+        package_list = [f"{pkg}=={ver}" if ver else pkg for pkg, ver in packages.items()]
+    elif isinstance(packages, (list, tuple)):
+        package_list = packages
+    else:
+        raise TypeError("packages must be a dictionary, list, or tuple")
+
+    package_format = re.compile(r'^[a-zA-Z0-9_-]+(==\d+(\.\d+)*)?$')
+    
+    inv_map = {v: k for k, v in PACKAGE_NAME_EXCEPTIONS.items()}
+
+    for pkg in package_list:
+        if '==' in pkg:
+            pkg_name, version = pkg.split('==')
+        else:
+            pkg_name, version = pkg, ''
+
+        updated_pkg = inv_map[pkg_name] if pkg_name in inv_map.keys() else pkg_name 
+
+        pkg = updated_pkg if version == '' else f"{updated_pkg}=={version}"
+        if not isinstance(pkg, str):
+            raise TypeError(f"Each package must be a string, not {type(pkg)}")
+        
+        if not package_format.match(pkg):
+            raise ValueError(f"Invalid package format: {pkg}. Expected format: 'package' or 'package==version'")
+        
+        try:
+            print(f"Attempting to install {pkg} with Mamba...")
+            subprocess.run(["mamba", "install", "-y", pkg], check=True)
+        except subprocess.CalledProcessError:
+            print(f"Mamba installation failed for {pkg_name}. Attempting pip install...")
+            try:
+                subprocess.run([sys.executable, "-m", "pip", "install", pkg], check=True)
+            except subprocess.CalledProcessError:
+                raise ValueError(f"Failed to install {pkg} with both Mamba and pip.")
+        print(f"Successfully installed {pkg_name}")
 
 def _get_imported_top_level_packages_from_ipynb(path):
     try:
@@ -96,8 +135,28 @@ def _get_imported_top_level_packages(files):
 
     return imported_packages
 
-def _get_installed_packages():
+import json
+
+def _get_mamba_installed_packages():
     packages = {}
+    try:
+        # Run 'mamba list' and capture its JSON output
+        result = subprocess.run(["mamba", "list", "--json"], capture_output=True, text=True, check=True)
+        mamba_packages = json.loads(result.stdout)
+        
+        for package_info in mamba_packages:
+            package = package_info['name']
+            version = package_info['version']
+            packages[_package_version_key(package)] = version
+    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
+        print(f"Error getting Mamba packages: {e}")
+    
+    return packages
+
+def _get_pip_installed_packages():
+    packages = {}
+    
+    # Get packages installed with pip
     freeze_lines = _run_subprocess([sys.executable, '-m', 'pip', 'freeze'])
     for line in freeze_lines:
         parts = line.split('==')
@@ -111,6 +170,19 @@ def _get_installed_packages():
         if len(parts) >= 2:
             package, version = parts[0], parts[1]
             packages[_package_version_key(package)] = version
+
+    return packages
+
+def _get_installed_packages():
+    packages = {}
+    
+    # Get packages installed with Mamba
+    mamba_packages = _get_mamba_installed_packages()
+    packages.update(mamba_packages)
+
+    # Get packages installed with pip
+    pip_packages = _get_pip_installed_packages()
+    packages.update(pip_packages)
 
     return packages
 
@@ -133,5 +205,6 @@ def _get_package_versions(imported_packages, installed_packages):
 
         if not version:  # if version is empty, try to get it from module.__version__
             version = _get_package_version(package)
+
         specific_versions[package] = version
     return specific_versions

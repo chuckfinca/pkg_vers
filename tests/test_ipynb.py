@@ -32,7 +32,6 @@ class TestGetImportedPackages(unittest.TestCase):
         ]
         temp_file_path = self.create_notebook(cells)
         imported_packages = _get_imported_top_level_packages_from_ipynb(temp_file_path)
-        print(f"imported_packages: {imported_packages}")
         expected_packages = {'numpy', 'sklearn'}
         self.assertEqual(imported_packages, expected_packages)
         os.unlink(temp_file_path)

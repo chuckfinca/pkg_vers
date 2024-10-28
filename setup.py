@@ -17,6 +17,7 @@ setup(
     ],
     install_requires=[
         'nbformat',
+        'stdlib-list'
     ],
     python_requires='>=3.8',
     license_files = ('LICENSE.txt',),
